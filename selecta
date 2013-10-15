@@ -10,7 +10,7 @@
 # If this seems confusing, don't worry. You can treat it as a normal Ruby file
 # starting with the "!ruby" shebang below.
 
-exec /usr/bin/env ruby --disable-gems -x "$0"
+exec /usr/bin/env ruby --disable-gems -x "$0" $*
 #!ruby
 
 if RUBY_VERSION < '1.9.3'
@@ -27,11 +27,9 @@ KEY_CTRL_P = 16.chr
 KEY_CTRL_W = 23.chr
 KEY_DELETE = 127.chr
 
-class Selecta
-  def main
-    config = Configuration.from_inputs($stdin.readlines)
-    search = Search.blank(config)
-
+class SearchUI
+  def run(config, matcher)
+    search = Search.blank(config, matcher)
     search = run_in_screen(config, search)
     puts search.selected_choice
   end
@@ -81,6 +79,33 @@ class Selecta
   end
 end
 
+class Selecta
+  def main
+    config = Configuration.from_inputs($stdin.readlines)
+    matcher = proc { |query|
+      re = query.split(//).map(&Regexp.method(:escape)).join('.*')
+      re = /#{re}/i
+      config.choices.select { |s| s =~ re }
+    }
+    SearchUI.new.run(config, matcher)
+  end
+end
+
+class Produca
+  def main
+    command = ARGV.join(" ")
+    config = Configuration.new(20, [])
+    matcher = proc { |query|
+      if query.length > 0
+        `echo "#{query}" | #{command}`.split("\n")
+      else
+        []
+      end
+    }
+    SearchUI.new.run(config, matcher)
+  end
+end
+
 class Configuration < Struct.new(:visible_choices, :choices)
   def initialize(visible_choices, choices)
     # Constructor is defined to force argument presence; otherwise Struct
@@ -111,20 +136,20 @@ class Configuration < Struct.new(:visible_choices, :choices)
 end
 
 class Search
-  attr_reader :choices, :index, :query, :config
+  attr_reader :choices, :index, :query, :visible_choices, :matcher
 
   def initialize(vars)
     @vars = vars
-    @config = vars.fetch(:config)
-    @choices = vars.fetch(:choices)
+    @visible_choices = vars.fetch(:visible_choices)
     @index = vars.fetch(:index)
     @query = vars.fetch(:query)
     @done = vars.fetch(:done)
+    @matcher = vars.fetch(:matcher)
   end
 
-  def self.blank(config)
-    new(:config => config,
-        :choices => config.choices,
+  def self.blank(config, matcher)
+    new(:matcher => matcher,
+        :visible_choices => config.visible_choices,
         :index => 0,
         :query => "",
         :done => false)
@@ -143,7 +168,7 @@ class Search
   end
 
   def down
-    index = [@index + 1, matches.count - 1, config.visible_choices - 1].min
+    index = [@index + 1, matches.count - 1, visible_choices - 1].min
     merge(:index => index)
   end
 
@@ -166,9 +191,7 @@ class Search
   end
 
   def matches
-    re = query.split(//).map(&Regexp.method(:escape)).join('.*')
-    re = /#{re}/i
-    @choices.select { |s| s =~ re }
+    matcher.call(query)
   end
 
   def done
@@ -179,7 +202,7 @@ end
 class Renderer < Struct.new(:search, :screen)
   def self.render!(search, screen)
     rendered = Renderer.new(search, screen).render
-    start_line = screen.height - search.config.visible_choices - 1
+    start_line = screen.height - search.visible_choices - 1
     screen.with_cursor_hidden do
       screen.write_lines(start_line, rendered.choices)
       screen.move_cursor(start_line, rendered.search_line.length)
@@ -198,8 +221,8 @@ class Renderer < Struct.new(:search, :screen)
   end
 
   def correct_match_count(matches)
-    limited = matches[0, search.config.visible_choices]
-    padded = limited + [""] * (search.config.visible_choices - limited.length)
+    limited = matches[0, search.visible_choices]
+    padded = limited + [""] * (search.visible_choices - limited.length)
     padded
   end
 
@@ -454,9 +477,14 @@ class TTY < Struct.new(:in_file, :out_file)
   end
 end
 
-if $0 == __FILE__
+mains = {
+  "selecta" => Selecta,
+  "produca" => Produca
+}
+
+if (cls = mains[File.basename($0)])
   begin
-    Selecta.new.main
+    cls.new.main
   rescue SystemExit, Interrupt
     exit(1)
   end
