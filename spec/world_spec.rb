@@ -2,7 +2,7 @@ require_relative "spec_helper"
 
 describe Search do
   let(:config) { Configuration.from_inputs(["one", "two", "three"]) }
-  let(:world) { Search.blank(config) }
+  let(:world) { Search.blank(config, proc { |q| config.choices.grep(/#{q}/) }) }
 
   it "selects the first choice by default" do
     world.selected_choice.should == "one"

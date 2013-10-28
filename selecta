@@ -215,7 +215,7 @@ class Renderer < Struct.new(:search, :screen)
     search_line = "> " + search.query
     matches = search.matches
     unless matches.empty?
-      matches[search.index] = Text[:default_black, matches.fetch(search.index)]
+      matches[search.index] = Text[:yellow_black, matches.fetch(search.index)]
     end
     matches = correct_match_count(matches)
     choices = [search_line] + matches
