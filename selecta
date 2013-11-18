@@ -98,7 +98,7 @@ end
 class Produca
   def main
     command = ARGV.join(" ")
-    config = Configuration.new(20, [])
+    config = Configuration.new(20, "", [])
     matcher = proc { |query|
       if query.length > 0
         `echo "#{query}" | #{command}`.split("\n")
