@@ -85,10 +85,14 @@ class Selecta
     options = Configuration.parse_options(ARGV)
     config = Configuration.from_inputs($stdin.readlines, options)
     matcher = proc { |query|
-      IO.popen(['matcher', '--limit', '50', query], 'r+') do |io|
-        io.puts config.choices
-        io.close_write
-        io.read.split("\n")
+      if query.length > 0
+        IO.popen(['matcher', '--limit', '50', query], 'r+') do |io|
+          io.puts config.choices
+          io.close_write
+          io.read.split("\n")
+        end
+      else
+        config.choices
       end
     }
     SearchUI.new.run(config, matcher)
