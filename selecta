@@ -92,7 +92,8 @@ class Selecta
           io.read.split("\n")
         end
       else
-        config.choices
+        # Urgh
+        config.choices[0, config.visible_choices]
       end
     }
     SearchUI.new.run(config, matcher)
@@ -176,7 +177,7 @@ class Configuration < Struct.new(:visible_choices, :initial_search, :choices)
 end
 
 class Search
-  attr_reader :choices, :index, :query, :visible_choices, :matcher
+  attr_reader :index, :query, :visible_choices, :matcher
 
   def initialize(vars)
     @vars = vars
