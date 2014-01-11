@@ -490,24 +490,18 @@ class ANSI
     @file = file
   end
 
-  def escape(sequence)
+  def self.escape(sequence)
     ESC + "[" + sequence
   end
 
-  def clear
-    escape "2J"
-  end
-
-  def hide_cursor
-    escape "?25l"
-  end
-
-  def show_cursor
-    escape "?25h"
-  end
+  def clear;       ANSI.escape "2J";   end
+  def hide_cursor; ANSI.escape "?25l"; end
+  def show_cursor; ANSI.escape "?25h"; end
+  def inverse;     ANSI.escape("7m");  end
+  def reset;       ANSI.escape("0m");  end
 
   def setpos(line, column)
-    escape "#{line + 1};#{column + 1}H"
+    ANSI.escape "#{line + 1};#{column + 1}H"
   end
 
   def addstr(str)
@@ -539,15 +533,7 @@ class ANSI
     }
     fg_code = fg_codes.fetch(fg)
     bg_code = bg_codes.fetch(bg)
-    escape "#{fg_code};#{bg_code}m"
-  end
-
-  def inverse
-    escape("7m")
-  end
-
-  def reset
-    escape("0m")
+    ANSI.escape "#{fg_code};#{bg_code}m"
   end
 
   def clear!(*args); write clear(*args); end
