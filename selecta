@@ -20,10 +20,12 @@ end
 require "optparse"
 require "io/console"
 
-KEY_CTRL_C = ?\C-c
-KEY_CTRL_N = ?\C-n
-KEY_CTRL_P = ?\C-p
-KEY_CTRL_W = ?\C-w
+KEY_CTRL_C     = ?\C-c
+KEY_CTRL_N     = ?\C-n
+KEY_CTRL_P     = ?\C-p
+KEY_CTRL_W     = ?\C-w
+KEY_ARROW_UP   = "[A"
+KEY_ARROW_DOWN = "[B"
 KEY_DELETE = 127.chr # Equivalent to ?\C-?
 
 class SearchUI
@@ -53,17 +55,20 @@ class SearchUI
   def ui_event_loop(search, screen, tty)
     while not search.done?
       Renderer.render!(search, screen)
-      search = handle_key(search, tty.get_char)
+      search = handle_key(search, tty.get_char, tty)
     end
     search
   end
 
   # On each keystroke, generate a new search object
-  def handle_key(search, key)
-    case key
+  def handle_key(search, key, tty)
 
-    when KEY_CTRL_N then search.down
-    when KEY_CTRL_P then search.up
+    # If we get the ansi escape character, read the next two characters to see if it's up/down arrow
+    key = tty.get_char + tty.get_char if key == ANSI::ESC
+
+    case key
+    when KEY_CTRL_N, KEY_ARROW_DOWN  then search.down
+    when KEY_CTRL_P, KEY_ARROW_UP    then search.up
 
     when KEY_CTRL_W then search.delete_word
     when KEY_DELETE then search.backspace
@@ -101,8 +106,9 @@ end
 
 class Produca
   def main
+    options = Configuration.parse_options(ARGV)
     command = ARGV.join(" ")
-    config = Configuration.new(20, "", [])
+    config = Configuration.new(20, options[:search], [])
     matcher = proc { |query|
       if query.length > 0
         `echo "#{query}" | #{command}`.split("\n")
