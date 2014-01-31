@@ -35,7 +35,7 @@ class SearchUI
 
   # Initialize the screen (and tear it down properly when done).
   def run_in_screen(config, search)
-    Screen.with_screen do |screen, tty|
+    Screen.with_screen(config.tty) do |screen, tty|
       # We emit the number of lines we'll use later so we don't clobber whatever
       # was already on the screen.
       config.visible_choices.times { tty.puts }
@@ -103,7 +103,7 @@ end
 class Produca
   def main
     command = ARGV.join(" ")
-    config = Configuration.new(20, "", [])
+    config = Configuration.new(20, "", [], "/dev/tty")
     matcher = proc { |query|
       if query.length > 0
         `echo "#{query}" | #{command}`.split("\n")
@@ -115,8 +115,8 @@ class Produca
   end
 end
 
-class Configuration < Struct.new(:visible_choices, :initial_search, :choices)
-  def initialize(visible_choices, initialize, choices)
+class Configuration < Struct.new(:visible_choices, :initial_search, :choices, :tty)
+  def initialize(visible_choices, initialize, choices, tty)
     # Constructor is defined to force argument presence; otherwise Struct
     # defaults missing arguments to nil
     super
@@ -124,7 +124,7 @@ class Configuration < Struct.new(:visible_choices, :initial_search, :choices)
 
   def self.from_inputs(choices, options)
     choices = massage_choices(choices)
-    Configuration.new(20, options.fetch(:search), choices)
+    Configuration.new(20, options.fetch(:search), choices, options.fetch(:tty))
   end
 
   def self.default_options
@@ -145,6 +145,11 @@ class Configuration < Struct.new(:visible_choices, :initial_search, :choices)
       options[:search] = ""
       opts.on("-s", "--search SEARCH", "Specify an initial search string") do |search|
         options[:search] = search
+      end
+
+      options[:tty] = "/dev/tty"
+      opts.on("-t", "--tty TTY", "Specify the TTY to display on") do |tty|
+        options[:tty] = tty
       end
     end
 
@@ -336,8 +341,8 @@ class Renderer < Struct.new(:search, :screen)
 end
 
 class Screen
-  def self.with_screen
-    TTY.with_tty do |tty|
+  def self.with_screen(tty)
+    TTY.with_tty(tty) do |tty|
       screen = self.new(tty)
       screen.configure_tty
       begin
@@ -560,11 +565,11 @@ class ANSI
   end
 end
 
-class TTY < Struct.new(:in_file, :out_file)
-  def self.with_tty(&block)
-    File.open("/dev/tty", "r") do |in_file|
-      File.open("/dev/tty", "w") do |out_file|
-        tty = TTY.new(in_file, out_file)
+class TTY < Struct.new(:tty_file, :in_file, :out_file)
+  def self.with_tty(tty, &block)
+    File.open(tty, "r") do |in_file|
+      File.open(tty, "w") do |out_file|
+        tty = TTY.new(tty, in_file, out_file)
         block.call(tty)
       end
     end
@@ -584,6 +589,8 @@ class TTY < Struct.new(:in_file, :out_file)
 
   def stty(args)
     command("stty #{args}")
+  rescue Exception => e
+    ""
   end
 
   private
@@ -591,7 +598,7 @@ class TTY < Struct.new(:in_file, :out_file)
   # Run a command with the TTY as stdin, capturing the output via a pipe
   def command(command)
     IO.pipe do |read_io, write_io|
-      pid = Process.spawn(command, :in => "/dev/tty", :out => write_io)
+      pid = Process.spawn(command, :in => tty_file, :out => write_io)
       Process.wait(pid)
       raise "Command failed: #{command.inspect}" unless $?.success?
       write_io.close
